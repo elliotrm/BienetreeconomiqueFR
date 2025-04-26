@@ -1,0 +1,384 @@
+---
+title: "Programme_memoire"
+author: "Elliot Rault Maisonneuve"
+date: "2024-02-18"
+output: html_document
+---
+
+#Import librairies
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library(quantmod)
+library(jsonlite)
+library(GGally)
+library(plotly)
+library(performance)
+library(cowplot)
+library(gridExtra)
+library(corrplot)
+library(car)
+library(stargazer)
+library(ggcorrplot)
+library(broom)
+library(knitr)
+```
+
+#Dossier de travail fixé
+
+```{r}
+setwd("C:/Users/ellio/Desktop/Rennes L3/Semestre 2/Mémoire de modélisation économique Magistère/code")
+```
+
+#Import de la data
+
+```{r}
+df <- read_excel("../data/newdata/database.xlsx")
+```
+
+#Taille de la data
+
+```{r}
+dim(df)
+#63 observations, 17 indicateurs (années compte pas)
+
+```
+
+#Résumé de la data
+ 
+```{r}
+summary(df)
+#Pas de problèmes particuliers, que des indicateurs quantitatifs
+
+```
+#Changement du nom des variables de colonnes puis tri sur les années où il n'y a pas de données manquantes (1975-2016)
+```{r}
+colnames(df)[2:18] <- c("tx_chomage","PIB_constants_2015_$","RDB","IPC_final_menages","pa_menages","tx_epargne","dcf_menage","pop_moyenne","nb_menages","nb_unit_conso","Ind_Gini","premier_decile","neuvieme_decile","ecart_interdecile", "rapport_interdecile","rapport_interquintile_des_masses", "pop_satisfaction")
+
+df <- df[df$Années >= 1975 & df$Années <= 2016,]
+```
+
+
+#Partie 1 : Statistique descriptive
+#Variable endogène --> pop_satisfaction
+
+```{r}
+ggplot(data = df, aes(x = Années, y = pop_satisfaction))+
+  geom_line(color = "orange", size = 1.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +
+  labs(title = "Satisfaction des français de 1975 à 2016", x = "Années", y = "En % de la population")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+#Sauvegarde du graphique
+ggsave("pop_satisfaction.png", width = 12, height = 6, units = "in")
+```
+
+
+#Différents indice de bien être économique
+
+#Représentaion du PIB par habitant en France
+
+```{r}
+# Définir l'URL de l'API pour récupérer le taux de change USD vers EUR
+url <- "https://api.exchangerate-api.com/v4/latest/USD"
+
+# Récupérer les données JSON de l'API
+tx <- fromJSON(url)
+
+# Extraire le taux de change USD vers EUR
+taux_de_change <- tx$rates$EUR
+
+# Afficher le taux de change
+print(taux_de_change)
+
+#Résumé statistique avant changement
+summary(df$PIB_constants_2015)
+
+#Changement des données du dollar vers l'euro
+df[["PIB_constants_2015_€"]] <- df[["PIB_constants_2015_$"]] * taux_de_change
+
+#Résumé statistique après changement
+summary(df$`PIB_constants_2015_€`)
+
+#Boxplot
+boxplot(df$`PIB_constants_2015_€`, main = "Boxplot du PIB par habitant en euros constants 2015", ylab = "Euros")
+
+# Créer un graphique ggplot
+ggplot(data = df, aes(x = Années, y = `PIB_constants_2015_€`)) +
+  
+  # Ajouter une ligne
+  geom_line(color = "black", size = 1.5) +
+  
+  #Ajout d'une courbe de tendance
+  geom_smooth(method = "lm", se = FALSE, color = "blue", linetype = "dashed") +
+  
+  # Ajouter des étiquettes d'axe
+  labs(x = "Années", y = "Montant en €", title = "PIB par habitant en euros contants 2015 de 1975 à 2016") +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+ggsave("Graphique_PIB.png", width = 12, height = 6, units = "in")
+```
+
+
+#Représentation graphique du revenu disponible brut en fonction des années
+#Graph
+
+```{r}
+ggplot(data = df, aes(x = Années, y = RDB)) +
+  geom_line(color = "cyan", size = 1.5) + 
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +
+  labs(title = "RDB de 1975 à 2016", x = "Années", y = "En %")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+#RDP Avec Y
+
+```{r}
+# Créer le graphique
+plot <- ggplot(data = df, aes(x = Années)) +
+  geom_line(aes(y = RDB, color = "RDB"), size = 1.5) +
+  geom_line(aes(y = pop_satisfaction, color = "Pop Satisfaction"), size = 1.5) +
+  geom_smooth(aes(y = RDB), method = "lm", se = FALSE, linetype = "dashed", color = "black") +
+  geom_smooth(aes(y = pop_satisfaction), method = "lm", se = FALSE, linetype = "dashed", color = "black") +
+  labs(title = "Satisfaction des français comparée au RDB de 1975 à 2016", x = "Années", y = "En %") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  guides(color = guide_legend(title = "Légende", override.aes = list(size = 3)))
+
+# Afficher le graphique
+print(plot)
+
+# Sauvegarder le graphique
+ggsave("Graphique_RDB_Y.png", plot, width = 12, height = 6, units = "in")
+```
+
+
+#Représentation du pouvoir d'achat en France
+
+```{r}
+# Créer un graphique ggplot
+ggplot(data = df, aes(x = Années, y = pa_menages)) +
+  
+  # Ajouter une ligne
+  geom_line(color = "red", size = 1.5) +
+  
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +
+  # Ajouter des étiquettes d'axe
+  labs(x = "Années", y = "En % par rapport à l'année précédente", title = "Pouvoir d'achat du revenu disponible brut des ménages de 1975 à 2016") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("Pouvoir_d'achat.png", width = 12, height = 6, units = "in")
+```
+
+
+
+#Regroupement de plusieurs graphiques de bien être éco (pouvoir d'achat, taux de chômage, taux d'épargne)
+
+```{r}
+# Graphique taux de chômage
+plot1 <- ggplot(data = df, aes(x = Années, y = tx_chomage)) +
+  geom_line(color = "orange", size = 1) +
+  labs(
+    title = "Taux de chômage de 1975 à 2016",
+    x = "Années",
+    y = "Pourcentage de chômage\nen fonction de la population active"
+  ) +
+  theme_minimal()
+
+# Graphique du taux d'épargne
+plot2 <- ggplot(data = df, aes(x = Années, y = tx_epargne)) +
+  geom_line(color = "cyan", size = 1) +
+  labs(
+    title = "Taux d'épargne de 1975 à 2016",
+    x = "Années",
+    y = "Pourcentage du revenu brut"
+  ) +
+  theme_minimal()
+
+# Ajout de la source au premier graphique
+plot1 <- plot1 +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Ajout de la source au second graphique
+plot2 <- plot2 +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Affichage des graphiques côte à côte
+grid.arrange(plot1, plot2, nrow = 1)
+
+# Sauvegarde des graphiques avec des dimensions personnalisées
+ggsave("fenetre_graphique.png", arrangeGrob(plot1, plot2, nrow = 1),
+       width = 12, height = 6, units = "in")
+
+
+```
+
+
+#Regroupement de plusieurs graphiques de bien être éco (dépense conso, revenu disponible)
+
+```{r}
+# Graphique Dépense Conso
+p1 <- ggplot(df, aes(x = Années, y = dcf_menage)) +
+  geom_line(color = "blue", size = 1) +
+  labs(title = "DCF_menage de 1975 à 2016", x = "Années", y = "DCF (en %)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Boxplot Dépense Conso
+p2 <- ggplot(df, aes(y = dcf_menage)) +
+  geom_boxplot() +
+  labs(title = "Dépense consommation finale", y = "en %") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Graphique revenu disponible Brut
+p3 <- ggplot(df, aes(x = Années, y = RDB)) +
+  geom_line(color = "blue", size = 1) +
+  labs(title = "RDB de 1975 à 2016", x = "Années", y = "RDB (en %)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Boxplot RDB
+p4 <- ggplot(df, aes(y = RDB)) +
+  geom_boxplot() +
+  labs(title = "Revenu disponible brut", y = "en %") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Afficher les graphiques
+grid.arrange(p1, p2, p3, p4, ncol = 2, nrow = 2)
+
+# Sauvegarde des graphiques avec des dimensions personnalisées
+ggsave("fenetre_graphique2.png", arrangeGrob(p1, p2, p3, p4, ncol = 2, nrow = 2),
+       width = 12, height = 6, units = "in")
+
+
+```
+
+
+#Différents indices d'inégalités
+
+#1er décile, 9ème décile
+
+```{r}
+# Créer un graphique avec deux aires séparées pour le 1er et le 9ème décile
+ggplot(df, aes(x = Années)) +
+  geom_area(aes(y = premier_decile, fill = "1er décile"), color = "blue", alpha = 0.5) +
+  geom_area(aes(y = neuvieme_decile, fill = "9ème décile"), color = "green", alpha = 0.5) +
+  labs(title = "1er et 9ème décile de 1975 à 2016", x = "Années", y = "Valeur en euros") +
+  scale_fill_manual(name = "Décile", values = c("1er décile" = "skyblue3", "9ème décile" = "lightgreen")) +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+#Sauvegarde du graphique  
+ggsave("Graphique_deciles.png", width = 12, height = 6, units = "in")
+```
+
+
+#Regroupement des indicateurs d'inégalités dans un tableau
+
+```{r}
+
+# Tracer l'indice de Gini
+plot_gini <- ggplot(df, aes(x = Années, y = Ind_Gini)) +
+  geom_line(color = "purple", lwd = 1) +
+  labs(title = "Indice de Gini de 1975 à 2016", y = "Indicateur (entre 0 et 1)") +
+  theme(axis.text.y = element_text(size = 8)) + # Réduire la taille du texte de l'axe y
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Tracer le Rapport interdécile et le Rapport interquintile des masses avec couleurs correctes
+plot_rapport <- ggplot(df, aes(x = Années)) +
+  geom_line(aes(y = rapport_interdecile, color = "Rapport Interdécile"), lwd = 1) +
+  geom_line(aes(y = rapport_interquintile_des_masses, color = "Rapport interquintile"), lwd = 1) +
+  labs(title = "Rapport interdécile et interquintile de 1975 à 2016", y = "Ratios des indicateurs d'inégalité") +
+  theme(axis.text.y = element_text(size = 8)) + # Réduire la taille du texte de l'axe y
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(name = "Légende",  # Titre de la légende
+                     values = c("Rapport Interdécile" = "blue", "Rapport interquintile" = "green")) + # Attribution des couleurs et des noms
+  guides(color = guide_legend(override.aes = list(size = 3)))  # Ajustement de la taille de la légende
+
+# Afficher les deux graphiques côte à côte avec plus d'espace
+plot_grid(plot_gini, plot_rapport, ncol = 1, align = "v", rel_heights = c(2, 3))
+
+# Sauvegarde des graphiques avec des dimensions personnalisées
+ggsave("fenetre_graphique3.png", arrangeGrob(plot_gini, plot_rapport, ncol = 1),
+       width = 12, height = 6, units = "in")
+
+```
+
+#MODELE ECONOMETRIQUE
+
+```{r}
+#Suppression de la colonne PIB par habitant (en $) et Années, pour avoir la plupart des données dans les unités conformes
+
+df <- subset(df, select = c(-1,-3))
+df <- subset(df, select = -13)
+
+# Calculer la matrice de corrélation
+cor_matrix <- cor(df)
+
+# Tracer la matrice de corrélation avec des bulles au lieu de carrés et un titre
+plot <- ggcorrplot(cor_matrix, type = "lower", lab = TRUE, method = "circle", colors = c("cyan","white","orange"), lab_size = 2, ggtheme = ggplot2::theme_minimal(), title = "Matrice de Corrélation", digits = 1) 
+
+# Modifier le thème pour un fond blanc et ajouter des étiquettes d'axe inclinées sur l'axe x
+plot <- plot + theme_bw() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + theme(plot.title = element_text(hjust = 0.5))
+plot
+
+# Sauvegarder l'image sur fond blanc
+ggsave("correlation_plot.png", plot, width = 10, height = 8, dpi = 300)
+
+#Modèle de régression linéaire multiple
+
+model.rl1 <- lm(pop_satisfaction ~ ., data = df)
+summary(model.rl1)
+
+
+
+#Nouveau modèle sans les principales variables non significatives
+model.rl2 <- lm(pop_satisfaction ~ pop_moyenne + rapport_interdecile + RDB + `PIB_constants_2015_€`, data = df)
+summary(model.rl2)
+
+
+
+#pvaleur : seuil -> 5%, si pvalue < 0.05, on rejette H0 --> Variable significative
+
+#Autre modèle
+model.rl3 <- lm(pop_satisfaction ~   rapport_interdecile + `PIB_constants_2015_€` + RDB , data = df)
+summary(model.rl3)
+
+# Résumé du modèle 1
+summary_rl1 <- tidy(model.rl1)
+summary_rl1 <- summary_rl1[c("term", "estimate", "p.value")]
+colnames(summary_rl1) <- c("variables", "estimation", "p.value")
+rownames(summary_rl1) <- NULL
+
+# Résumé du modèle 2
+summary_rl2 <- tidy(model.rl2)
+summary_rl2 <- summary_rl2[c("term", "estimate", "p.value")]
+colnames(summary_rl2) <- c("variables", "estimation", "p.value")
+rownames(summary_rl2) <- NULL
+
+# Résumé du modèle 3
+summary_rl3 <- tidy(model.rl3)
+summary_rl3 <- summary_rl3[c("term", "estimate", "p.value")]
+colnames(summary_rl3) <- c("variables", "estimation", "p.value")
+rownames(summary_rl3) <- NULL
+
+# Créer un tableau HTML pour le modèle 1
+html_table_rl1 <- kable(summary_rl1, format = "html", caption = "Résumé du modèle 1")
+
+# Créer un tableau HTML pour le modèle 2
+html_table_rl2 <- kable(summary_rl2, format = "html", caption = "Résumé du modèle 2")
+
+# Créer un tableau HTML pour le modèle 3
+html_table_rl3 <- kable(summary_rl3, format = "html", caption = "Résumé du modèle 3")
+
+# Écrire les tableaux HTML dans des fichiers
+writeLines(html_table_rl1, "summary_rl1.html")
+writeLines(html_table_rl2, "summary_rl2.html")
+writeLines(html_table_rl3, "summary_rl3.html")
+```
+
